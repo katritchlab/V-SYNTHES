@@ -1,0 +1,21 @@
+call _startup
+l_confirm=yes
+maxMemory=8000
+maxFileSizeMb=2000
+
+l_commands = l_info = l_warn = yes
+
+path_to_files=Path()+"/files/"
+path_to_store_files=Path()+"/files/"
+
+read sys ls -1a $path_to_files/*.sdf #fetch all fragments
+sdf_files=Split(s_out, "\n")  
+
+for i=1,Nof(sdf_files)
+  sdf_file=sdf_files[i]
+  sdf_file_copy=path_to_store_files+"/"+Name(sdf_file)+".sdf"
+  inx_file=path_to_store_files+"/"+Name(sdf_file)+".inx"
+  if(!Exist(sdf_file_copy)) sys cp $sdf_file $sdf_file_copy
+  if(!Exist(inx_file)) write index mol sdf_file_copy inx_file
+  delete all tables
+endfor

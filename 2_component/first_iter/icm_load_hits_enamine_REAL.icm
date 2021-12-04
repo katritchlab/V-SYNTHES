@@ -1,0 +1,192 @@
+#!bash
+call _startup
+l_commands=no
+errorAction="exit"
+maxMemory = 8000 #Mb, max RAM size to be used by ICM
+
+#####
+#put the script into folder above /run/
+#
+#variables to be modified by the user, can be read from inut file
+score_threshold="-18."
+MAX_MOLS_OUT="30000" #maximum size of hitlist, larger sizes make ICM unstable. 
+#If MAX_MOLS_OUT size is reached, new hits are firstly added to the results table, 
+#then sorted by score and then the list is cut to have exactly MAX_MOLS_OUT molecules.
+#####
+
+if(Exist("./input_VSYNTHES.in")) then
+  read table separator ="\t" "input_VSYNTHES.in"
+  a = input_VSYNTHES.A
+  b = input_VSYNTHES.B
+  for i = 1,Nof(a)
+    if(a[i]!="" & a[i][1]!="#" & b[i][1]!="#") then
+      $a[i] = b[i]
+      print a[i] "\t" $a[i]
+    endif
+  endfor 
+else
+  print "input_VSYNTHES.in is not provided, going with defaults settings"
+endif
+
+root_folder=Path() 
+
+path_ob_files=root_folder+"/run/"
+path_inx_files=root_folder+"/files/"
+project_path= root_folder+"/run/"
+
+read sys ls $project_path/*.htm #always PROJECTNAME_LOG.htm
+tmp_name=Split(s_out,"\n")[1]
+tmp_name=Split(tmp_name,"/")[Nof(Split(tmp_name,"/"))]
+project_name = tmp_name[1:Length(tmp_name)-8]
+print project_name
+final_name=project_name+"_"+Split(root_folder,"/")[Nof(Split(root_folder,"/"))]
+
+out_dir=path_ob_files+"/processing_files/"
+if(!Exist(out_dir)) sys mkdir $out_dir
+
+score_worst=-5.#these two only for autogeneration of histogram
+score_best=-60.
+
+set directory path_ob_files
+read sys ls -1a *1.ob
+files= Split(s_out,"\n")
+nof_files=Nof(files)
+
+set directory project_path
+
+s_out=Path()
+currentDockProj.S_projects=Unique(Sort(Replace( Name(Sarray( s_out + "/*_gc.map|*.dtb" directory sort simple )) "_gc*" "" )))
+
+nof_hits={0}
+
+max_score=score_worst
+min_score=score_best
+n_bins=Integer((max_score-min_score+1)*2)
+nof_hits=Iarray(n_bins)
+nof_scores=Rarray(n_bins)
+
+max_MW=500.
+min_MW=0.
+n_bins_MWs=Integer((max_MW-min_MW)/5.) #every 5 units
+nof_mols_MWs=Iarray(n_bins_MWs)
+nof_MWs=Rarray(n_bins_MWs)
+
+max_LogP=7.
+min_LogP=0.
+n_bins_logp=Integer((max_LogP-min_LogP)*4.) #every 0.25 units
+nof_mols_logp=Iarray(n_bins_logp)
+nof_logp=Rarray(n_bins_logp)
+
+nofhits=0
+nofgoodhits=0
+
+var0=Time()
+for i_f=1,nof_files #fork 31
+  var1=Time()
+  obj_file=path_ob_files+"/"+files[i_f]
+  if(Nof(Split(obj_file,"."))!=2) continue
+  ext=Split(obj_file,".")[2]
+  if(!Exist(obj_file) | ext!="ob") continue
+  hit_file_name = Name(obj_file)
+  scanMakeHitList project_name obj_file hit_file_name no yes yes 0
+  add column $hit_file_name function="MolWeight(mol)" index=2 name="MW" append format="%.3f"
+  add column $hit_file_name function="MolLogP(mol)" index=3 name="LogP" append format="%.3f"
+
+  #l_commands=no
+  for i_bins=1,n_bins_MWs
+    curr_MW=min_MW+Real(i_bins)*5.
+    if(i_f==1) nof_MWs[i_bins] =Real(curr_MW)
+    nof_mols_MWs[i_bins]=nof_mols_MWs[i_bins]+Nof($hit_file_name.MW<curr_MW)
+  endfor
+  print nof_mols_MWs, nof_MWs
+
+  for i_bins=1,n_bins_logp
+    curr_logp=min_LogP+Real(i_bins)/4.
+    if(i_f==1) nof_logp[i_bins] =Real(curr_logp)
+    nof_mols_logp[i_bins]=nof_mols_logp[i_bins]+Nof($hit_file_name.LogP<curr_logp)
+  endfor
+  print nof_mols_logp,nof_logp
+
+  for i_bins=1,n_bins
+    curr_score=min_score+Real(i_bins)/2-1
+    if(i_f==1) nof_scores[i_bins] =Real(curr_score)
+    nof_hits[i_bins]=nof_hits[i_bins]+Nof($hit_file_name.Score<curr_score)
+  endfor
+  #l_commands=yes
+
+  temp_t=$hit_file_name.Score<Real(score_threshold)
+  nofgoodhits=nofgoodhits+Nof(temp_t)
+
+  if(Nof(temp_t)>0) then
+    temp_inx_name=Split(hit_file_name,project_name,exact)[2]
+    inx_name=temp_inx_name[2:Length(temp_inx_name)-1]+".inx"
+    add column temp_t Sarray(Nof(temp_t),"-1") index =6 name="synton_id_3"
+    add column temp_t Sarray(Nof(temp_t),"") index =6 name="synton_id_2"
+    add column temp_t Sarray(Nof(temp_t),"") index =6 name="synton_id_1"
+    add column temp_t Sarray(Nof(temp_t),"") index =6 name="rxn_ID"
+    add column temp_t Sarray(Nof(temp_t),"") index =6 name="const_synth"
+    ix_to_lookup=temp_t.IX 
+    inx_file=path_inx_files+inx_name
+    read index inx_file name="ix"
+    nofhits=nofhits+Nof(ix)
+    read mol table ix[ix_to_lookup] name="ix"
+    if(Nof(ix)!=Nof(ix_to_lookup)) then
+      delete ix.NAME_==""
+    endif
+    temp_t.synton_id_1=Sarray(ix.synton_id_1)
+    temp_t.synton_id_2=Sarray(ix.synton_id_2)
+    if(Nof(ix.synton_id_3)>0) then
+      temp_t.synton_id_3=Sarray(ix.synton_id_3)
+    else
+      temp_t.synton_id_3=Sarray(Nof(temp_t),"-1")
+    endif
+    if(Nof(ix.rxn_ID)>0) then
+      temp_t.rxn_ID=Sarray(ix.rxn_ID)
+    else
+      curr_rxn_ID=Split(temp_inx_name,"_",exact)[2]
+      temp_t.rxn_ID=Sarray(Nof(temp_t),curr_rxn_ID)
+    endif
+    if(Nof(ix.const_synth)>0) then
+      temp_t.const_synth=Sarray(ix.const_synth)
+    endif
+    add column temp_t function="rxn_ID+'_'+Name(synton_id_1)+'_'+Name(synton_id_2)+'_'+Name(synton_id_3)" index =6 name="full_synton_id"
+    scanStandaloneHitList "temp_t"
+    add final_table temp_t
+    delete ix
+  endif
+
+  if(Nof(final_table)>Real(MAX_MOLS_OUT)) then
+    sort final_table.Score
+    delete final_table[Real(MAX_MOLS_OUT):Nof(final_table)]
+  endif
+
+  delete temp_t,$hit_file_name
+  var1=Time()-var1
+ 
+  print i_f, hit_file_name
+  if(Mod(i_f,Integer(Ceil(Real(nof_files)/5)))==0) then
+    writeProject out_dir+"testsave_"+String(i_f)+"_.icb"
+  endif
+  print "time for iter "+String(i_f)+":" var1
+  print "total time: "+String(Time()-var0)
+  print "number of hits before filtering:"+String(nofhits)
+  print "number of hits after filtering:"+String(nofgoodhits)
+endfor
+
+group table hits_hist nof_scores "score" nof_hits "Nhits"
+group table MWs_hist nof_MWs "MW" nof_mols_MWs "Nmol"
+group table logp_hist nof_logp "LogP" nof_mols_logp "Nmol"
+write MWs_hist out_dir+"hist_MW_"+final_name+".tab"
+write logp_hist out_dir+"hist_logp_"+final_name+".tab"
+
+sort final_table.Score
+frags_for_enum=final_table[1:1000]
+write table mol frags_for_enum out_dir+"frags_for_enum.sdf"
+
+rename final_table final_name
+writeProject out_dir+final_name
+
+hist_file=out_dir+"/hist_score_"+final_name+".tab"
+write hits_hist hist_file
+
+quit

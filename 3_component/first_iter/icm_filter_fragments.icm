@@ -1,0 +1,341 @@
+call _startup
+l_confirm=yes
+l_info=no
+l_commands=no
+errorAction="exit"
+maxMemory = 8000
+
+#####
+#put the script into folder above /run/
+#
+#variables to be modified by the user, can be read from inut file
+sel_hotspots_str='{"a_1.wa6//o","a_1.a/278/o | a_1.a/25/o","a_1.a/90/o | a_1.a/109/nz | a_1.a/106/ce1"}' #selections of receptor complex atoms to be used for filtering
+names_hotspots_str='{"wat","cav","hole"}' #names for columns holding distance information from radioactive caps to the selection, usually residue numbers
+cutoff_less_hotspots_str='{"6.","4.","4."}' #if cap is closer to the selection than the cutoff, the fragment is dropped
+cutoff_more_hotspots_str='{"no","no","no"}' #if cap is further from the selection than the cutoff, the fragment is dropped
+#change the parameters below if working with the full REAL library
+max_per_reaction_str="1.0"  #to 0.25
+max_frags_str="1000"  #to 4000   #if analyzed hitlist and found this many good hits, abort (less actions=>speedup)
+nof_frags_out_str="200" #to 2000  #number of best fragments output for further enumeration
+requested_frags_str="2000" #to 12000  #if original hitlist is larger, cut it to this size (less memory=>speedup)
+#####
+
+if(Exist("./input_VSYNTHES.in")) then
+  read table separator ="\t" "input_VSYNTHES.in"
+  a = input_VSYNTHES.A
+  b = input_VSYNTHES.B
+  for i = 1,Nof(a)
+    if(a[i]!="" & a[i][1]!="#" & b[i][1]!="#") then
+      $a[i] = b[i]
+      print a[i] "\t" $a[i]
+    endif
+  endfor 
+else
+  print "input_VSYNTHES.in is not provided, going with defaults settings"
+endif
+
+sel_hotspots=$sel_hotspots_str
+names_hotspots=$names_hotspots_str
+cutoff_less_hotspots=$cutoff_less_hotspots_str
+cutoff_more_hotspots=$cutoff_more_hotspots_str
+
+root_folder=Path()+"/run/processing_files/" 
+
+path_to_project=Path()+"/run/"
+read sys find $path_to_project/*_rec.ob
+rec_ob=Split(s_out,"\n")[1]
+temp_name=Split(rec_ob,"/")
+temp_ProjectName=temp_name[Nof(temp_name)]
+project_name=temp_ProjectName[1:Length(temp_ProjectName)-7]
+print project_name
+
+group table hotspots names_hotspots "names" sel_hotspots "sel" cutoff_more_hotspots "r_more" cutoff_less_hotspots "r_less"
+
+group table selection_type_cavities {"residues"} "name" {""} "sel" {""} "file_name"
+
+read sys ls -1a $root_folder/$project_name*.icb
+
+table_name= Name(Split(s_out,"\n")[1])
+file_frags=root_folder+table_name+".icb"
+file_out=root_folder+table_name+"cavities_out.icb"
+
+param_vol_outer=150.
+good_dist=3.0
+r_minVolume=50. 
+nof_frags_out=Integer(nof_frags_out_str)
+max_per_reaction=Integer(max_per_reaction_str)
+MAX_FRAGS=Integer(max_frags_str)
+requested_frags=Integer(requested_frags_str)
+
+if (Exist(file_out)) sys mv $file_out $file_out.OLD
+
+openFile file_frags
+
+pocket_selection=$hotspots.sel[1]
+for i_p=2,Nof(hotspots)
+  pocket_selection=pocket_selection | $hotspots.sel[i_p]
+endfor
+
+nof_all_frags=Min(MAX_FRAGS,Nof($table_name))
+if(table_name!="all_frags") then
+  all_frags=$table_name
+  sort all_frags.Score
+  all_frags= all_frags[1:nof_all_frags]
+  delete $table_name
+else
+  sort all_frags.Score
+  all_frags= all_frags[1:nof_all_frags]
+endif
+save_interval=500
+
+group table unmatched_mols Iarray()
+
+group table t_temp Charge(all_frags.mol)
+inx_temp=Index(t_temp.A>1.)
+delete all_frags[inx_temp]
+delete inx_temp,temp_t
+
+move all_frags.IX 30
+move all_frags.L 30
+move all_frags.NAME 30
+for i=1,Nof(hotspots)
+  curr_spot=hotspots.names[i]
+  if(Nof(all_frags.$curr_spot)==0) add column all_frags Rarray(Nof(all_frags),0.) index=4 name=curr_spot
+endfor
+
+if(Nof(all_frags.volume)==0) add column all_frags Rarray(Nof(all_frags),0.) index=6 name="volume"
+if(Nof(all_frags.best_d)==0) add column all_frags Rarray(Nof(all_frags),0.) index=6 name="best_d"
+if(Nof(all_frags.score1)==0) add column all_frags Rarray(Nof(all_frags),0.) index=6 name="score1"
+if(Nof(all_frags.score2)==0) add column all_frags Rarray(Nof(all_frags),0.) index=6 name="score2"
+if(Nof(all_frags.good)==0) add column all_frags Iarray(Nof(all_frags),0) index=3 name="good"
+if(Nof(all_frags.final_sel)==0) add column all_frags Sarray(Nof(all_frags),"") index=3 name="final_sel"
+
+for i=1,Nof(all_frags)
+
+N_good_mols=0 #to track count of molecules that passed filters
+
+for i_mol=1,Nof(all_frags) #Nof(all_frags)
+
+  if((i_mol-1)-save_interval*((i_mol-1)/save_interval)==0) then
+    writeProject file_out+"_"+String(i_mol-1) yes no "" 0
+  endif
+
+  print "FRAGMENT NUMBER:",i_mol
+
+  scanDsHit project_name "all_frags" i_mol no no
+ 
+  curr_frag=Chemical("[13C]")
+  find chemical a_1.m Chemical(Smiles(curr_frag)) all
+  as_sel_13C=a_1.m//!h* & as_out
+  curr_frag=Chemical("[13c]")
+  find chemical a_1.m Chemical(Smiles(curr_frag)) all
+  as_sel_13c=a_1.m//!h* & as_out
+  curr_frag=Chemical("[15n]")
+  find chemical a_1.m Chemical(Smiles(curr_frag)) all
+  as_sel_15n=a_1.m//!h* & as_out
+  curr_frag=Chemical("[15N]")
+  find chemical a_1.m Chemical(Smiles(curr_frag)) all
+  as_sel_15N=a_1.m//!h* & as_out
+  curr_frag=Chemical("[33S]")
+  find chemical a_1.m Chemical(Smiles(curr_frag)) all
+  as_sel_33S=a_1.m//!h* & as_out
+  curr_frag=Chemical("[17O]")
+  find chemical a_1.m Chemical(Smiles(curr_frag)) all
+  as_sel_17O=a_1.m//!h* & as_out
+  curr_frag=Chemical("[14C]")
+  find chemical a_1.m Chemical(Smiles(curr_frag)) all
+  as_sel_14C=a_1.m//!h* & as_out
+  curr_frag=Chemical("[14c]")
+  find chemical a_1.m Chemical(Smiles(curr_frag)) all
+  as_sel_14c=a_1.m//!h* & as_out
+  curr_frag=Chemical("[16n]")
+  find chemical a_1.m Chemical(Smiles(curr_frag)) all
+  as_sel_16n=a_1.m//!h* & as_out
+  curr_frag=Chemical("[16N]")
+  find chemical a_1.m Chemical(Smiles(curr_frag)) all
+  as_sel_16N=a_1.m//!h* & as_out
+  curr_frag=Chemical("[34S]")
+  find chemical a_1.m Chemical(Smiles(curr_frag)) all
+  as_sel_34S=a_1.m//!h* & as_out
+  curr_frag=Chemical("[18O]")
+  find chemical a_1.m Chemical(Smiles(curr_frag)) all
+  as_sel_18O=a_1.m//!h* & as_out
+
+
+  as_final=as_sel_14C | as_sel_14c | as_sel_16n | as_sel_16N | as_sel_34S | as_sel_18O #finish selection based on radioactive labeling
+  as_final=as_final | as_sel_13C | as_sel_13c | as_sel_15n | as_sel_15N | as_sel_33S | as_sel_17O
+  #delete a_temp_mol.
+
+  print "current selection info:",Nof(as_final)
+  
+  if(Nof(as_final)==0) then
+   print "COULD NOT MATCH FRAGMENTS!"
+   add unmatched_mols
+   unmatched_mols.A[Nof(unmatched_mols)]=i_mol
+   sys echo $i_mol >> bad_mols.txt
+   all_frags.score1[i_mol]=all_frags.Score[i_mol]
+   all_frags.score2[i_mol]=all_frags.Score[i_mol]
+   N_good_mols=N_good_mols+1
+   if(N_good_mols>requested_frags) then
+     break
+   endif
+   continue
+  endif
+
+  all_frags.good[i_mol]=1
+  all_frags.final_sel[i_mol]=String(as_final)
+
+
+  fail_check = false
+  for i_hot=1,Nof(hotspots)
+    curr_spot=hotspots.names[i_hot]
+    curr_sel=$hotspots.sel[i_hot]
+    if(Nof(curr_sel)==0) then
+      print "Invalid selection, check hotspot entry "+String(i_hot)
+      continue
+    endif
+    if(Nof(all_frags.$curr_spot)!=0) all_frags.$curr_spot[i_mol]=Min(Rarray(Distance(Xyz(as_final & a_1.m//!h* & a_1.m//!v*),Xyz(curr_sel))))
+    if(hotspots.r_less[i_hot]!="no") then
+      fail_check = fail_check | all_frags.$curr_spot[i_mol]<Real(hotspots.r_less[i_hot])
+    else
+      fail_check = fail_check | all_frags.$curr_spot[i_mol]>Real(hotspots.r_more[i_hot])
+    endif
+  endfor
+
+  if(fail_check) then
+    print "ligand does not pass selection criteria, skipping "+i_mol
+    continue
+  endif
+  N_good_mols=N_good_mols+1
+
+  as_=pocket_selection
+
+  l_info = no
+  l_confirm = no
+  l_openPocket= no
+  r_contourLevel =0.2
+  as_ = as_ & a_*.!W
+  mar = 2.2
+  delete grob "g_cavity*"
+
+  if(l_openPocket ) then
+    bbb = Box( as_ mar)
+    make map potential as_ bbb Ceil(Power(Volume(bbb[4:6]-bbb[1:3])/130000.,0.33),0.1)
+    make grob m_atoms r_contourLevel exact solid name="g_cavity"
+  else
+    make grob skin as_ as_ "g_cavity" #as_ as_ "g_cavity"
+  endif
+  split g_cavity 20.
+  nShells = i_out
+
+  if(nShells==0) then
+    rename g_cavity g_cavity1
+    nShells=1
+  endif
+  if(Type(g_cavity)=="grob") delete g_cavity
+
+  for i=1,nShells
+    if( Abs(Volume(g_cavity$i)) < r_minVolume ) break
+  endfor
+  nShells = i-1
+  global group table CLOSED_CAVITIES Count(nShells) "i" Rarray(nShells) "Volume" Rarray(nShells) "Area" Rarray(nShells) "Radius" Sarray(nShells) "Type"  header "undisplay grob\ndisplay smooth g_cavity%1 color[%1+1]\nas_graph=Sphere(g_cavity%1,2.5)" "cursor"
+  make plot CLOSED_CAVITIES "x=Volume;y=Area;color=i;size=8;title=Volumes and areas;;element=rectangle;x1=150;y1=200;x2=550;y2=550;color=blue;fillStyle=BDiagPattern;label=Drugs;labelPos=center"
+
+  print "nShells:"+String(nShells)
+  
+  for i_sh=1,nShells    
+    if( Type( g_cavity$i_sh )=="grob" ) then
+      v = Volume(g_cavity$i_sh)
+      s = r_out
+      if( Abs(v) < r_minVolume ) then
+        delete g_cavity$i_sh
+      elseif(v > 0.) then
+        CLOSED_CAVITIES.Volume[i_sh]= v
+        CLOSED_CAVITIES.Area[i_sh]= s
+        CLOSED_CAVITIES.Radius[i_sh]=3.*v/s
+        CLOSED_CAVITIES.Type[i_sh]= "outer envelope"
+      else
+        set g_cavity$i reverse
+        #link g_cavity$i Obj( as_ )[1]
+        CLOSED_CAVITIES.Volume[i_sh]=-v
+        CLOSED_CAVITIES.Area[i_sh]=s
+        CLOSED_CAVITIES.Radius[i_sh]=-3.*v/s
+        CLOSED_CAVITIES.Type[i_sh]= "cavity"+i+ " "+ String(Res(Sphere( g_cavity$i_sh as_ 2. )))
+        as_1 = Atom(as_) & Sphere( g_cavity$i_sh 2. )
+        s_mainColor = Color( Mol( as_1 ) field )[1]
+        if (s_mainColor == "") s_mainColor="lightblue"
+        color g_cavity$i_sh s_mainColor
+      endif
+    endif
+  endfor
+
+  curr_v=0.
+  best_d=100.
+  for i_cc=1,Nof(CLOSED_CAVITIES)
+    i_cav=CLOSED_CAVITIES.i[i_cc]
+    curr_dist=Min(Rarray(Distance(Xyz(g_cavity$i_cav) Xyz(as_final))))[1]
+    print "cavities info:",curr_dist,i_cav,CLOSED_CAVITIES.Volume[i_cc]
+    if(curr_dist<best_d) best_d=curr_dist
+    if(curr_dist>good_dist) continue
+    if(CLOSED_CAVITIES.Type[i_cc]=="outer envelope") then
+      curr_v=curr_v+param_vol_outer
+    else
+      curr_v=curr_v+CLOSED_CAVITIES.Volume[i_cc]
+    endif
+  endfor
+  
+  all_frags.volume[i_mol]=curr_v
+  all_frags.best_d[i_mol]=best_d
+  all_frags.score1[i_mol]=all_frags.Score[i_mol]-curr_v/50.
+  all_frags.score2[i_mol]=all_frags.Score[i_mol]-5.0*Sin(curr_v*90./300.)
+  delete CLOSED_CAVITIES
+  print i_mol
+
+  if(N_good_mols>requested_frags | i_mol==Nof(all_frags)) then
+    break
+  endif
+  
+endfor
+
+all_frags_best=all_frags
+for i_hot=1,Nof(hotspots)
+  curr_spot=hotspots.names[i_hot]
+  curr_sel=$hotspots.sel[i_hot]
+  if(Nof(all_frags_best.$curr_spot)!=0) then
+    if(hotspots.r_less[i_hot]!="no") then
+      all_frags_best=all_frags_best & all_frags_best.$curr_spot>Real(hotspots.r_less[i_hot])      
+    else
+      all_frags_best=all_frags_best & all_frags_best.$curr_spot<Real(hotspots.r_more[i_hot])
+    endif
+  endif
+endfor
+
+uniq_rxns=all_frags_best.rxn_ID[Index(all_frags_best.rxn_ID unique)]
+
+for i_rxn=1,Nof(uniq_rxns)
+  if(Nof(uniq_rxns)<5) then
+    add all_frags_top_score2 all_frags_best[1:Nof(tmp)]
+    break
+  endif
+  print i_rxn,uniq_rxns[i_rxn]
+  tmp=all_frags_best.rxn_ID==uniq_rxns[i_rxn]
+  sort tmp.score2
+  nof_to_add=Integer(Min(Nof(tmp),nof_frags_out*max_per_reaction))
+  add all_frags_top_score2 tmp[1:nof_to_add]
+  delete tmp
+endfor
+  
+sort all_frags_top_score2.score2
+add all_frags_top all_frags_top_score2
+
+all_frags_top=all_frags_top[Index(all_frags_top.full_synton_id unique)]
+
+frags_for_enum=all_frags_top[1:nof_frags_out]
+
+sort frags_for_enum.Score
+
+write table mol frags_for_enum "run/processing_files/frags_for_enum.sdf"
+
+delete all_frags_top_score,all_frags_top_score2
+
+writeProject file_out yes no "" 0

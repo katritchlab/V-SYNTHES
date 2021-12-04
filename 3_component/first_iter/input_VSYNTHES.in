@@ -1,0 +1,39 @@
+#variable	value	comment
+#
+#input parameters for docking_launcher.icm
+#
+ScoreThreshold	-18.	#score threshold for dockScan, hits with score below this value won't be saved
+icmhome_1	/usr/icm-3.9-2b	#path to the version of ICM Pro you would like to use
+effort_1	2.	#docking effort
+ncpu_1	31	#number of cores to be used by docking
+#project_path	/mnt/katritch_lab/Arman/SYNTHES/MSGA/SYNTHES_example_final/3_component/first_iter/run/	#docking project directory !PLEASE ADD / AT THE END OF PATH! !default is run/!
+#sdf_for_dock_path	/mnt/katritch_lab/Arman/SYNTHES/MSGA/SYNTHES_example_final/3_component/first_iter/files/	#.sdf and .inx files of molecules to dock !PLEASE ADD / AT THE END OF PATH! !default is files/!
+#
+#
+#input parameters for icm_load_hits_enamine_REAL.icm
+#
+#
+score_threshold	-18.	#only hits with score  better than the threshold will be saved for further analysis
+#
+#
+#input parameters for icm_filter_fragments.icm
+#
+#
+sel_hotspots_str	{"a_1.wa6//o","a_1.a/278/o | a_1.a/25/o","a_1.a/90/o | a_1.a/109/nz | a_1.a/106/ce1"}	#selections of receptor complex atoms to be used for filtering
+names_hotspots_str	{"wat","cav","hole"}	#names for columns holding distance information from radioactive caps to the selection, usually residue numbers
+cutoff_less_hotspots_str	{"6.","4.","4."}	#if cap is closer to the selection than the cutoff, the fragment is dropped
+cutoff_more_hotspots_str	{"no","no","no"}	#if cap is further from the selection than the cutoff, the fragment is dropped
+#change the parameters below if working with the full REAL library
+max_per_reaction_str	"1.0"	#to 0.25
+max_frags_str	"1000"	#to 4000   #if analyzed hitlist and found this many good hits, abort (less actions=>speedup)
+nof_frags_out_str	"200"	#to 2000  #number of best fragments output for further enumeration
+requested_frags_str	"2000"	#to 12000  #if original hitlist is larger, cut it to this size (less memory=>speedup)
+#
+#
+#
+#input parameters for icm_enumerate_REAL_frags.icm
+#
+#
+#
+MAX_MOLS	"300000"	#maximum number of enumerated molecules in the output
+FLT_3COMP	"426."	#change to 501. when enumerating final molecules of three-component library

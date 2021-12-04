@@ -1,0 +1,78 @@
+call _startup
+
+maxFileSizeMb=2000
+
+l_commands = l_info = l_warn = yes 
+
+#####
+#put the script into folder above /run/
+#
+#variables to be modified by the user, can be read from inut file
+ScoreThreshold="-18."
+icmhome_1="/usr/icm-3.8-7d"
+effort_1="2."
+ncpu_1="31" #"30"
+project_path=Path()+"/run/" #docking project directory
+sdf_for_dock_path="" #default is files/ in the directory above project_path
+#####
+
+if(Exist("./input_VSYNTHES.in")) then
+  read table separator ="\t" "input_VSYNTHES.in"
+  a = input_VSYNTHES.A
+  b = input_VSYNTHES.B
+  for i = 1,Nof(a)
+    if(a[i]!="" & a[i][1]!="#" & b[i][1]!="#") then
+      $a[i] = b[i]
+      print a[i] "\t" $a[i]
+    endif
+  endfor 
+else
+  print "input_VSYNTHES.in is not provided, going with defaults settings"
+endif
+
+
+read sys find $project_path/*_rec.ob
+rec_ob=Split(s_out,"\n")[1]
+temp_name=Split(rec_ob,"/")
+temp_ProjectName=temp_name[Nof(temp_name)]
+ProjectName=temp_ProjectName[1:Length(temp_ProjectName)-7]
+
+if(sdf_for_dock_path=="") then
+    curr_path=Split(project_path,"/")
+    for i=1,Nof(curr_path)-1
+        sdf_for_dock_path=sdf_for_dock_path+curr_path[i]+"/"
+    endfor
+    sdf_for_dock_path=sdf_for_dock_path+"files/"
+endif
+
+path_to_files=sdf_for_dock_path
+nproc_fork=Integer(ncpu_1)
+
+read sys hostname
+curr_hostname=Split(s_out,"\n")[1]
+if(Exist(curr_hostname)) then #file with workload is found
+  read sys cat $curr_hostname
+else
+  read sys ls -1a $path_to_files/*.inx #*st*.inx #fetch all fragments
+endif
+
+s_1=s_out
+inx_files=Split(s_1, "\n")
+
+set directory project_path
+
+for i=1,Nof(inx_files) #fork 3
+  inx_file=inx_files[i]
+  print inx_file
+  inx_name=Name(inx_file)
+  if(!Exist(inx_file) ) continue
+  print "start docking, iteration "+String(i)
+  print "file name "+Name(inx_file)
+  sdf_file=path_to_files+Name(inx_file)+".sdf"
+  read sys stat --printf="%s" $sdf_file
+  size_mb=Real(s_out)/1024/1024
+  print "current file size, MB: "+size_mb
+  unix $icmhome_1/icm64 $icmhome_1/_dockScan $ProjectName input=$inx_file effort=$effort_1 proc=$nproc_fork scoreCutoff=$ScoreThreshold name=$inx_name > job_$i.log 2>&1
+endfor
+
+quit

@@ -1,0 +1,263 @@
+call _startup
+l_commands=no
+errorAction="exit"
+
+#####
+#put the script into folder above /run/
+#
+#variables to be modified by the user
+MAX_MOLS="300000" #maximum number of enumerated molecules in the output
+FLT_3COMP="426." #change to 501. when enumerating final molecules of three-component library
+#####
+
+if(Exist("./input_VSYNTHES.in")) then
+  read table separator ="\t" "input_VSYNTHES.in"
+  a = input_VSYNTHES.A
+  b = input_VSYNTHES.B
+  for i = 1,Nof(a)
+    if(a[i]!="" & a[i][1]!="#" & b[i][1]!="#") then
+      $a[i] = b[i]
+      print a[i] "\t" $a[i]
+    endif
+  endfor 
+else
+  print "input_VSYNTHES.in is not provided, going with defaults settings"
+endif
+
+path_to_project=Path()+"/run/"
+read sys find $path_to_project/*_rec.ob
+rec_ob=Split(s_out,"\n")[1]
+temp_name=Split(rec_ob,"/")
+temp_ProjectName=temp_name[Nof(temp_name)]
+project_name=temp_ProjectName[1:Length(temp_ProjectName)-7]
+print project_name
+REC_NAME=Split(project_name,"_")[1]
+print "receptor name is: "+REC_NAME
+
+path_to_synthons=Path()+"/synthons/"
+path_to_reactions=Path()+"/REACTIONS_SYNTHONS_minimal.icb" #contains min synthons too
+reactions_table="all_reactions"
+min_synth_table="caps_all_synthons"
+path_to_frags=Path()+"/files/"
+
+root_folder=Path()+"/run/processing_files/"
+path_to_synthons_to_enum=root_folder+"/frags_for_enum.sdf"
+out_dir=root_folder+"/enumerated_best_frags_"+REC_NAME+"_"+MAX_MOLS+"/"
+if(!Exist(out_dir)) sys mkdir $out_dir
+
+openFile path_to_reactions
+reactions=$reactions_table
+minimal_synthons=$min_synth_table
+
+openFile path_to_synthons_to_enum
+table_name_to_enum=Name(Split(path_to_synthons_to_enum,"/")[Nof(Split(path_to_synthons_to_enum,"/"))])
+frags_for_enum=$table_name_to_enum
+nof_frags=Nof(frags_for_enum)
+
+#all synthon ids should be integers
+cols_to_fix={"synton_id_1","synton_id_2","synton_id_3"}
+for i_c=1,Nof(cols_to_fix)
+  curr_col=cols_to_fix[i_c]
+  if(Type(frags_for_enum.curr_col)=="iarray") continue
+  I_out = Tointeger( frags_for_enum.$curr_col )
+  delete frags_for_enum.$curr_col
+  add column frags_for_enum I_out name=curr_col index=5
+  set format frags_for_enum.$curr_col name=curr_col
+endfor
+
+nof_mols=0
+
+for i=1,nof_frags 
+  
+  frags_inx=Split(frags_for_enum.full_synton_id[i],"_") #should be 4: sXX_s1_s2_s3
+  print i, frags_inx
+  nof_frags_inx=Nof(frags_inx)
+  curr_react_id=frags_inx[1]
+  inx_s1=frags_inx[nof_frags_inx-2]
+  inx_s2=frags_inx[nof_frags_inx-1]
+  inx_s3=frags_inx[nof_frags_inx]
+
+  curr_reaction=(reactions.ID==curr_react_id)
+  N_comp=Integer(curr_reaction.N_comp[1])
+
+  if(N_comp==3) then
+  
+    # now lets load correct synthons and create tables r1,r2,r3
+    #idea is that if results are obtained from docking of sXX_const_23.inx, synthon 1 is the first anchor, 
+    #and if any of synthons 2 and 3 have 0 in their synthon id, we need to enumerate by them. If both of them are 0, enumerate 2 times.
+    const_synth=String(frags_for_enum.const_synth[i])
+    group table new_synthons {"1" "2" "3"} "synthon" Sarray(3) "tag"
+ 
+    if(const_synth=="12") anchor_synthon1="3"
+    if(const_synth=="13") anchor_synthon1="2"
+    if(const_synth=="23") anchor_synthon1="1"
+    new_synthons.tag[Index(new_synthons.synthon==anchor_synthon1)]="anchor_synthon1"   
+    inx_of_enum_sython={"" ""}
+    inx_of_enum_sython[1]="inx_s"+(new_synthons.tag=="").synthon[1]
+    inx_of_enum_sython[2]="inx_s"+(new_synthons.tag=="").synthon[2]
+    nof_enumerations=0
+    if($inx_of_enum_sython[1]=="0") nof_enumerations+=1
+    if($inx_of_enum_sython[2]=="0") nof_enumerations+=1
+
+    new_synthons
+
+    for i_enum=1,nof_enumerations
+
+      var_synthon=(inx_of_enum_sython[i_enum])[6] #inx_sX
+      anchor_synthon2=(inx_of_enum_sython[Mod(i_enum,2)+1])[6]
+
+      check_if_fully_enumerated="inx_s"+var_synthon
+      if ($check_if_fully_enumerated!="0") then
+        print "reaction fully enumerated, skipping"
+        continue
+      endif
+
+      print "i_enum var_synthon anchor_synthon1 anchor_synthon2"
+      print i_enum,var_synthon,anchor_synthon1,anchor_synthon2
+      #var_synthon
+      s_var_name=curr_react_id+"_"+var_synthon
+      file_s_var=path_to_synthons+"/"+s_var_name+".sdf"
+      openFile file_s_var
+      r_table_name_var="r"+var_synthon
+      $r_table_name_var=$s_var_name
+      
+      #anchor_synthon1
+      s_anch_name1=curr_react_id+"_"+anchor_synthon1
+      curr_synth_pos1="inx_s"+anchor_synthon1
+      inx_curr_synth1=Integer($curr_synth_pos1)
+      if(inx_curr_synth1!=0) then
+        file_s_anch1=path_to_synthons+"/"+s_anch_name1+".sdf"
+        openFile file_s_anch1
+        inx_s=Index($s_anch_name1.synton_id==inx_curr_synth1)[1]
+        curr_synthon_mol=$s_anch_name1[inx_s]
+      else #need to load minimal synthon
+        curr_synthon_mol=(minimal_synthons.synthon==(curr_react_id+"_"+anchor_synthon1))    
+      endif
+      r_table_name1="r"+anchor_synthon1
+      $r_table_name1=curr_synthon_mol
+      
+      #anchor_synthon2
+      s_anch_name2=curr_react_id+"_"+anchor_synthon2
+      curr_synth_pos2="inx_s"+anchor_synthon2
+      inx_curr_synth2=Integer($curr_synth_pos2)
+      if(inx_curr_synth2!=0) then
+        file_s_anch1=path_to_synthons+"/"+s_anch_name2+".sdf"
+        openFile file_s_anch1
+        inx_s=Index($s_anch_name2.synton_id==inx_curr_synth2)[1]
+        curr_synthon_mol=$s_anch_name2[inx_s]
+      else #need to load minimal synthon
+        curr_synthon_mol=(minimal_synthons.synthon==(curr_react_id+"_"+anchor_synthon2))    
+      endif
+      r_table_name2="r"+anchor_synthon2
+      $r_table_name2=curr_synthon_mol
+    
+      print Nof(r1),Nof(r2),Nof(r3)
+  #writeProject "debug_enum.icb"
+  
+  # now lets setup enumeration
+      flt_r="MolWeight(mol)<"+FLT_3COMP
+      tmp={0 0}
+      tmp[1]=Integer(anchor_synthon1)
+      tmp[2]=Integer(anchor_synthon2)
+      sort tmp
+      const_synthons=String(tmp[1])+String(tmp[2])
+      file_r=out_dir+curr_reaction.ID[1]+"_var"+var_synthon+"_const"+anchor_synthon1+"_"+String(inx_curr_synth1)+"_const"+anchor_synthon2+"_"+String(inx_curr_synth2)+"_"+const_synthons+".sdf"
+      table_name=Name(file_r)
+      if(Exist(file_r)) sys rm $file_r
+      if(curr_reaction.good[1]=="yes") then
+        make reaction curr_reaction.mol[1] r1.mol r1.synton_id r2.mol r2.synton_id r3.mol r3.synton_id filter = flt_r output = file_r
+        if(Exist(file_r)) then#fix the enumerated out file
+          openFile file_r
+          add column $table_name Iarray(Nof($table_name),Integer(const_synthons)) name="const_synth"
+          add column $table_name Sarray(Nof($table_name),curr_reaction.ID[1]) name="rxn_ID"
+        endif
+      endif
+      if(curr_reaction.good[1]=="markush") then
+        l_info=no
+        for i_m=1,Nof(r1)
+          enumerate library r1.mol[i_m] r1.synton_id[i_m] r2.mol r2.synton_id r3.mol r3.synton_id filter = flt_r
+          if(Nof(T_enum)>0) then
+            add column T_enum Iarray(Nof(T_enum),Integer(r1.synton_id[i_m])) name="synton_id_1" index=2
+            add column T_enum Iarray(Nof(T_enum),Integer(const_synthons)) name="const_synth"
+            add column T_enum Sarray(Nof(T_enum),curr_reaction.ID[1]) name="rxn_ID"
+            add markush_table T_enum
+          endif
+        endfor
+        l_info=yes
+        if(Nof(markush_table)>0) then
+          if(Nof(markush_table.R1)>0) then
+            rename markush_table.R1 "synton_id_2"
+          else
+            rename markush_table.R1_synton_id "synton_id_2"
+          endif
+          if(Nof(markush_table.R2)>0) then
+            rename markush_table.R2 "synton_id_3"
+          else
+            rename markush_table.R2_synton_id "synton_id_3"
+          endif
+          rename markush_table table_name
+          print "Markush: "+String(Nof($table_name))
+          write table mol $table_name file_r
+          delete $table_name, T_enum
+        endif
+      endif
+      delete $s_anch_name1,$s_anch_name2,$s_var_name
+
+      if(Exist(file_r)) then
+        read sys grep "\$\$\$\$" $file_r | wc -l
+        nof_mols=nof_mols+Integer(Split(s_out,"\n")[1])
+      endif
+
+    endfor
+  elseif(N_comp==2) then
+    if(inx_s1=="0") then
+      var_synthon="1"
+      anchor_synthon1="2"
+    else
+      var_synthon="2"
+      anchor_synthon1="1"
+    endif
+    s_var_name=curr_react_id+"_"+var_synthon
+    file_s_var=path_to_synthons+"/"+s_var_name+".sdf"
+    openFile file_s_var
+    r_table_name_var="r"+var_synthon
+    $r_table_name_var=$s_var_name
+
+    s_anch_name1=curr_react_id+"_"+anchor_synthon1
+    curr_synth_pos1="inx_s"+anchor_synthon1
+    inx_curr_synth1=Integer($curr_synth_pos1)
+    file_s_anch=path_to_synthons+"/"+s_anch_name1+".sdf"
+    openFile file_s_anch
+    inx_s=Index($s_anch_name1.synton_id==inx_curr_synth1)[1]
+    curr_synthon_mol=$s_anch_name1[inx_s]
+    r_table_name1="r"+anchor_synthon1
+    $r_table_name1=curr_synthon_mol
+
+    flt_r="MolWeight(mol)<"+String(501.)#+Integer(($r_table_name1).MW[1]))
+    file_r=out_dir+curr_reaction.ID[1]+"_var"+var_synthon+"_const"+anchor_synthon1+"_"+String(inx_curr_synth1)+"_"+anchor_synthon1+".sdf"
+    table_name=Name(file_r)
+    if(Exist(file_r)) sys rm $file_r
+    if(curr_reaction.good[1]=="yes") then
+      make reaction curr_reaction.mol[1] r1.mol r1.synton_id r2.mol r2.synton_id filter = flt_r output = file_r
+    endif
+
+    if(Exist(file_r)) then
+      openFile file_r
+      add column $table_name Sarray(Nof($table_name),"-1") name="synton_id_3"
+      add column $table_name Sarray(Nof($table_name),String(anchor_synthon1)) name="const_synth"
+      add column $table_name Sarray(Nof($table_name),curr_reaction.ID[1]) name="rxn_ID"
+      read sys grep "\$\$\$\$" $file_r | wc -l
+      nof_mols=nof_mols+Integer(Split(s_out,"\n")[1])
+    endif
+
+  endif
+  
+  delete $s_var_name,$s_anch_name1,$s_anch_name2
+  delete r1,r2,r3
+
+  print i, nof_mols
+  if(Real(nof_mols)>0.98*Real(MAX_MOLS)) break
+
+endfor
+
+quit

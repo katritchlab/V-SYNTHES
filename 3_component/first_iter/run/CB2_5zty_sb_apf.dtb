@@ -1,0 +1,180 @@
+#>I CB2_5zty_sb_apf.CN_I_active
+  0
+#>R CB2_5zty_sb_apf.CN_R_maxDist
+  0.
+#>R CB2_5zty_sb_apf.CN_R_minDist
+  0.
+#>R CB2_5zty_sb_apf.CN_R_weight
+  0.
+#>S CB2_5zty_sb_apf.CN_S_atom
+
+#>S CB2_5zty_sb_apf.CN_S_dest
+
+#>S CB2_5zty_sb_apf.CN_S_type
+
+#>R CB2_5zty_sb_apf.R_4DscoreOffsets
+  0.
+#>R CB2_5zty_sb_apf.R_boxDim
+  1.95492
+  -9.55451
+  -64.7653
+  15.741
+  8.36945
+  -45.586
+#>R CB2_5zty_sb_apf.R_ligInitPosition
+  9.48757
+  -1.50382
+  -56.4392
+  1.
+  0.
+  0.
+  0.
+  1.
+  0.
+#>R CB2_5zty_sb_apf.R_scoreWeights
+  0.
+  1.
+  0.6
+  0.66
+  2.53
+  0.67
+  0.75
+  0.6
+#>i CB2_5zty_sb_apf.i_dbSize
+ 1
+#>i CB2_5zty_sb_apf.i_maxHdonors
+ 5
+#>i CB2_5zty_sb_apf.i_maxLigSize
+ 500
+#>i CB2_5zty_sb_apf.i_maxNO
+ 10
+#>i CB2_5zty_sb_apf.i_maxTorsion
+ 10
+#>i CB2_5zty_sb_apf.i_minLigSize
+ 100
+#>i CB2_5zty_sb_apf.i_mnconf
+ 40
+#>i CB2_5zty_sb_apf.i_mnhighEnergy
+ 9999
+#>i CB2_5zty_sb_apf.i_mnreject
+ 10
+#>i CB2_5zty_sb_apf.i_mnvisits
+ 10
+#>i CB2_5zty_sb_apf.i_ringFlexLevel
+ 2
+#>l CB2_5zty_sb_apf.l_assignCharges
+  yes
+#>l CB2_5zty_sb_apf.l_buildHydrogens
+  yes
+#>l CB2_5zty_sb_apf.l_dbondCisTrans
+  no
+#>l CB2_5zty_sb_apf.l_enhancedBorn
+  no
+#>l CB2_5zty_sb_apf.l_fixOmegas
+  no
+#>l CB2_5zty_sb_apf.l_internalHB
+  yes
+#>l CB2_5zty_sb_apf.l_neutralAcidsMol
+  no
+#>l CB2_5zty_sb_apf.l_protProt
+  no
+#>l CB2_5zty_sb_apf.l_readyLigand
+  no
+#>l CB2_5zty_sb_apf.l_readyMaps
+  yes
+#>l CB2_5zty_sb_apf.l_readyReceptor
+  yes
+#>l CB2_5zty_sb_apf.l_samplePyramid
+  no
+#>l CB2_5zty_sb_apf.l_sampleRacemic
+  no
+#>l CB2_5zty_sb_apf.l_softLigand
+  yes
+#>l CB2_5zty_sb_apf.l_useBornScore
+  yes
+#>r CB2_5zty_sb_apf.r_DpH
+  2.
+#>r CB2_5zty_sb_apf.r_GRID_maxVw
+  4.
+#>r CB2_5zty_sb_apf.r_ScoreThreshold
+  -32.
+#>r CB2_5zty_sb_apf.r_Score_maxVw
+  1.
+#>r CB2_5zty_sb_apf.r_densityWeight
+  0.
+#>r CB2_5zty_sb_apf.r_dockScanVersion
+  4.6
+#>r CB2_5zty_sb_apf.r_maxFFen
+  500.
+#>r CB2_5zty_sb_apf.r_maxPk
+  5.
+#>r CB2_5zty_sb_apf.r_mcShake
+  4.
+#>r CB2_5zty_sb_apf.r_mfScoreThreshold
+  999.
+#>r CB2_5zty_sb_apf.r_minPk
+  0.
+#>r CB2_5zty_sb_apf.r_pH
+  7.
+#>r CB2_5zty_sb_apf.r_plRsMiss
+  0.
+#>r CB2_5zty_sb_apf.r_temperature
+  1000.
+#>r CB2_5zty_sb_apf.r_thRstrnt
+  -1.
+#>r CB2_5zty_sb_apf.r_thTautomer
+  -1.
+#>r CB2_5zty_sb_apf.r_vicinity
+  2.
+#>s CB2_5zty_sb_apf.s_bindPatchRes
+a_CB2_5zty_sb_apf_rec.2/*|a_CB2_5zty_sb_apf_rec.a/^F87,^S90:^F91,^F94:^H95,^F106,^K109:^I110,^V113:^T114,^F117,^P168,^L182:^P184,^I186,^Y190:^L191,^W194:^L195,^I198,^W258,^V261:^L262,^M265,^F281:^A282,^S285,^C288
+#>s CB2_5zty_sb_apf.s_chargeGroups
+none
+#>s CB2_5zty_sb_apf.s_clrLig
+default
+#>s CB2_5zty_sb_apf.s_clrRec
+grey
+#>s CB2_5zty_sb_apf.s_clrSite
+default pink
+#>s CB2_5zty_sb_apf.s_covModResAt
+none
+#>s CB2_5zty_sb_apf.s_covRxn
+none
+#>s CB2_5zty_sb_apf.s_dbFile
+NOTSET
+#>s CB2_5zty_sb_apf.s_dbIndex
+NOTSET
+#>s CB2_5zty_sb_apf.s_dbType
+mol 2D
+#>s CB2_5zty_sb_apf.s_dspLig
+xstick
+#>s CB2_5zty_sb_apf.s_dspRec
+wire
+#>s CB2_5zty_sb_apf.s_dspSite
+xstick
+#>s CB2_5zty_sb_apf.s_grid4DFlex
+none
+#>s CB2_5zty_sb_apf.s_ligMol
+3:3
+#>s CB2_5zty_sb_apf.s_ligName
+deflig
+#>s CB2_5zty_sb_apf.s_optSC
+a_none
+#>s CB2_5zty_sb_apf.s_recExplicitObj
+none
+#>s CB2_5zty_sb_apf.s_recMol
+1:2
+#>s CB2_5zty_sb_apf.s_recName
+CB2_5zty_sb_apf_rec
+#>s CB2_5zty_sb_apf.s_selLig
+a_*.*//*
+#>s CB2_5zty_sb_apf.s_selRec
+a_*.*//*
+#>s CB2_5zty_sb_apf.s_selSite
+a_*.*//!M5
+#>s CB2_5zty_sb_apf.s_templateMatch
+APF
+#>s CB2_5zty_sb_apf.s_templateObj
+CB2_5zty_sb_apf_tmplt.ob
+#>s CB2_5zty_sb_apf.s_xrObj
+none
